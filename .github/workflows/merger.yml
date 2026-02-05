@@ -1,0 +1,44 @@
+name: Merge audio + video
+
+on:
+  repository_dispatch:
+    types: [merge]
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install ffmpeg & awscli
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg awscli
+
+      - name: Download video
+        run: |
+          aws s3 cp s3://${{ secrets.R2_BUCKET }}/video0.mp4 video0.mp4 \
+            --endpoint-url ${{ secrets.R2_ENDPOINT }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+
+      - name: Download audio
+        run: |
+          aws s3 cp s3://${{ secrets.R2_BUCKET }}/tts_audio.mp3 tts_audio.mp3 \
+            --endpoint-url ${{ secrets.R2_ENDPOINT }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+
+      - name: Merge video + audio
+        run: |
+          ffmpeg -y -i video0.mp4 -i tts_audio.mp3 -map 0:v -map 1:a -c:v copy -shortest merged.mp4
+
+      - name: Upload merged video
+        run: |
+          aws s3 cp merged.mp4 s3://${{ secrets.R2_BUCKET }}/merged.mp4 \
+            --endpoint-url ${{ secrets.R2_ENDPOINT }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}

@@ -1,9 +1,9 @@
 name: Merge audio + video
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:   # теперь можно запускать вручную
   repository_dispatch:
-    types: [merge]
+    types: [merge]    # для запуска через n8n/API
 
 jobs:
   merge:
@@ -13,10 +13,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install ffmpeg & awscli
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg awscli
-
-      - name: Download video
+      - name: Install FFmpeg & AWS CLI
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg python3-pip
+          pip3 install awscli --upgrade --user
+          export PATH=$PATH:~/.local/bin
+          
+      - name: Download video from R2
         run: |
           aws s3 cp s3://${{ secrets.R2_BUCKET }}/video0.mp4 video0.mp4 \
             --endpoint-url ${{ secrets.R2_ENDPOINT }}
@@ -24,7 +28,7 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
 
-      - name: Download audio
+      - name: Download audio from R2
         run: |
           aws s3 cp s3://${{ secrets.R2_BUCKET }}/tts_audio.mp3 tts_audio.mp3 \
             --endpoint-url ${{ secrets.R2_ENDPOINT }}
@@ -36,7 +40,7 @@ jobs:
         run: |
           ffmpeg -y -i video0.mp4 -i tts_audio.mp3 -map 0:v -map 1:a -c:v copy -shortest merged.mp4
 
-      - name: Upload merged video
+      - name: Upload merged video back to R2
         run: |
           aws s3 cp merged.mp4 s3://${{ secrets.R2_BUCKET }}/merged.mp4 \
             --endpoint-url ${{ secrets.R2_ENDPOINT }}

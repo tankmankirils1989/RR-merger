@@ -1,9 +1,9 @@
 name: Merge audio + video
 
 on:
-  workflow_dispatch:   # теперь можно запускать вручную
+  workflow_dispatch:   # ручной запуск
   repository_dispatch:
-    types: [merge]    # для запуска через n8n/API
+    types: [merge]    # запуск через n8n/API
 
 jobs:
   merge:
@@ -19,7 +19,7 @@ jobs:
           sudo apt-get install -y ffmpeg python3-pip
           pip3 install awscli --upgrade --user
           export PATH=$PATH:~/.local/bin
-          
+
       - name: Download video from R2
         run: |
           aws s3 cp s3://${{ secrets.R2_BUCKET }}/video0.mp4 video0.mp4 \
@@ -36,9 +36,14 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
 
-      - name: Merge video + audio
+      - name: Merge video + audio (trim video to audio length)
         run: |
-          ffmpeg -y -i video0.mp4 -i tts_audio.mp3 -map 0:v -map 1:a -c:v copy -shortest merged.mp4
+          # получаем длину аудио в секундах
+          AUDIO_DURATION=$(ffprobe -i tts_audio.mp3 -show_entries format=duration -v quiet -of csv="p=0")
+          echo "Audio duration: $AUDIO_DURATION seconds"
+
+          # merge видео + аудио, обрезаем видео до длины аудио
+          ffmpeg -y -i video0.mp4 -i tts_audio.mp3 -map 0:v -map 1:a -c:v copy -c:a aac -t $AUDIO_DURATION merged.mp4
 
       - name: Upload merged video back to R2
         run: |

@@ -1,9 +1,9 @@
 name: Merge audio + video
 
 on:
-  workflow_dispatch:   # ручной запуск
+  workflow_dispatch:
   repository_dispatch:
-    types: [merge]    # запуск через n8n/API
+    types: [merge]
 
 jobs:
   merge:
@@ -18,11 +18,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ffmpeg python3-pip
           pip3 install awscli --upgrade --user
-          export PATH=$PATH:~/.local/bin
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
 
-      - name: Download video from R2
+      - name: Generate random video index (0-9)
         run: |
-          aws s3 cp s3://${{ secrets.R2_BUCKET }}/video0.mp4 video0.mp4 \
+          INDEX=$((RANDOM % 10))
+          echo "VIDEO_INDEX=$INDEX" >> $GITHUB_ENV
+          echo "Using video index: $INDEX"
+
+      - name: Download random video from R2
+        run: |
+          aws s3 cp s3://${{ secrets.R2_BUCKET }}/video${VIDEO_INDEX}.mp4 video.mp4 \
             --endpoint-url ${{ secrets.R2_ENDPOINT }}
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -38,12 +44,13 @@ jobs:
 
       - name: Merge video + audio (trim video to audio length)
         run: |
-          # получаем длину аудио в секундах
           AUDIO_DURATION=$(ffprobe -i tts_audio.mp3 -show_entries format=duration -v quiet -of csv="p=0")
           echo "Audio duration: $AUDIO_DURATION seconds"
 
-          # merge видео + аудио, обрезаем видео до длины аудио
-          ffmpeg -y -i video0.mp4 -i tts_audio.mp3 -map 0:v -map 1:a -c:v copy -c:a aac -t $AUDIO_DURATION merged.mp4
+          ffmpeg -y -i video.mp4 -i tts_audio.mp3 \
+            -map 0:v -map 1:a \
+            -c:v copy -c:a aac \
+            -t $AUDIO_DURATION merged.mp4
 
       - name: Upload merged video back to R2
         run: |
